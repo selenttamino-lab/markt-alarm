@@ -1,0 +1,70 @@
+# Startet die Prüfung alle 5 Minuten (GitHub verzögert geplante Läufe oft um einige Minuten)
+# und veröffentlicht danach die Website mit den neuen Daten.
+name: Markt-Alarm
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Testnachricht aufs Handy schicken"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write      # Zustand zwischen den Läufen im Zweig "zustand" speichern
+  pages: write         # Website veröffentlichen
+  id-token: write
+
+concurrency:
+  group: markt-alarm
+  cancel-in-progress: false
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: github-pages
+      url: ${{ steps.veroeffentlichen.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zustand vom letzten Lauf holen
+        run: |
+          if git fetch --depth=1 origin zustand 2>/dev/null; then
+            git show origin/zustand:zustand.json > zustand.json
+          else
+            echo "{}" > zustand.json
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Requests installieren
+        run: pip install --quiet requests
+
+      - name: Kurse und Schlagzeilen prüfen
+        env:
+          NTFY_THEMA: ${{ secrets.NTFY_THEMA }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python markt_alarm.py ${{ inputs.test && '--test' || '' }}
+
+      - name: Zustand speichern
+        run: |
+          mkdir -p "$RUNNER_TEMP/zustand"
+          cp zustand.json "$RUNNER_TEMP/zustand/"
+          cd "$RUNNER_TEMP/zustand"
+          git init -q -b zustand
+          git add zustand.json
+          git -c user.name="markt-alarm" -c user.email="markt-alarm@users.noreply.github.com" commit -q -m "Zustand"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" zustand
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+      - id: veroeffentlichen
+        uses: actions/deploy-pages@v4

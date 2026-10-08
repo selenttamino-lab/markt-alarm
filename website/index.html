@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Markt-Alarm</title>
+<meta name="description" content="Kurse, Schlagzeilen und Einschätzungen zum S&amp;P 500">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Markt-Alarm">
+<meta name="theme-color" content="#eef1f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f181b" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="symbol-180.png">
+<link rel="icon" type="image/png" href="symbol-192.png">
+<style>
+:root{
+  --grund:#eef1f0;--flaeche:#fbfcfc;--text:#17272c;--text2:#3d5054;--leise:#5f7276;
+  --rand:#d6dedd;--gitter:#e3e9e8;--achse:#9aaaad;
+  --linie:#0e6b66;--wash:rgba(14,107,102,.10);--spur:#d3e7e4;
+  --rot:#a8322a;--rot-hell:#f6dedb;--gruen:#22703b;--gruen-hell:#dbeedf;--grau-hell:#e4eaea;
+  --warn:#fff4d6;--warnrand:#d9b65a;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --grund:#0f181b;--flaeche:#162226;--text:#e3ecea;--text2:#b8c7c5;--leise:#8ea1a3;
+  --rand:#2a3a3e;--gitter:#213036;--achse:#5d7175;
+  --linie:#58c2b8;--wash:rgba(88,194,184,.12);--spur:#1f3f3d;
+  --rot:#f08a80;--rot-hell:#46231f;--gruen:#7fd197;--gruen-hell:#1c3a26;--grau-hell:#24343a;
+  --warn:#33290f;--warnrand:#7a6222;
+  color-scheme:dark;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--grund);color:var(--text);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,sans-serif}
+main{max-width:1060px;margin:0 auto;padding:max(28px,env(safe-area-inset-top)) 20px max(56px,env(safe-area-inset-bottom))}
+h1{font:600 clamp(1.7rem,4.6vw,2.3rem)/1.1 Charter,"Iowan Old Style",Georgia,serif;margin:0;letter-spacing:-.01em}
+h2{font-size:1.05rem;margin:0;font-weight:600}
+p{margin:0}
+button{font:inherit;color:var(--text);background:var(--flaeche);border:1px solid var(--rand);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--achse)}
+button:focus-visible,a:focus-visible,svg:focus-visible,summary:focus-visible{outline:2px solid var(--linie);outline-offset:2px}
+
+.kopf{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:baseline;justify-content:space-between}
+.frische{display:flex;align-items:center;gap:10px;color:var(--leise);font-size:.92rem}
+.frische .punkt{width:9px;height:9px;border-radius:50%;background:var(--achse);flex:none}
+.frisch .punkt{background:var(--gruen);box-shadow:0 0 0 3px var(--gruen-hell)}
+.frische button{padding:3px 10px;font-size:.86rem}
+.hinweis{margin-top:14px;padding:10px 14px;background:var(--warn);border-left:4px solid var(--warnrand);border-radius:3px;font-size:.94rem}
+.hinweis[hidden]{display:none}
+
+.karte{background:var(--flaeche);border:1px solid var(--rand);border-radius:10px}
+.haupt{margin-top:20px;padding:20px 22px 14px}
+.haupt-kopf{display:flex;flex-wrap:wrap;gap:6px 28px;align-items:flex-end;justify-content:space-between}
+.marktname{color:var(--leise);font-size:.95rem}
+.held{font-size:clamp(48px,11vw,64px);font-weight:600;line-height:1.05;letter-spacing:-.02em}
+.kennzahlen{display:flex;flex-wrap:wrap;gap:8px 26px;padding-bottom:6px}
+.kennzahl .wert{font-weight:600;font-variant-numeric:tabular-nums}
+.kennzahl .bez{color:var(--leise);font-size:.86rem}
+.messer{width:120px;height:6px;border-radius:3px;background:var(--spur);margin-top:6px;overflow:hidden}
+.messer i{display:block;height:100%;border-radius:3px;background:var(--linie)}
+.messer.voll i{background:var(--rot)}
+
+.diagramm{position:relative;margin-top:14px;touch-action:pan-y}
+.diagramm svg{display:block;width:100%;overflow:visible}
+.diagramm .gitter{stroke:var(--gitter);stroke-width:1}
+.diagramm .vortag{stroke:var(--achse);stroke-width:1}
+.diagramm .achse{fill:var(--leise);font-size:12px;font-variant-numeric:tabular-nums}
+.diagramm .flaeche{fill:var(--wash)}
+.diagramm .linie{fill:none;stroke:var(--linie);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.diagramm .ende{fill:var(--linie);stroke:var(--flaeche);stroke-width:2}
+.diagramm .faden{stroke:var(--achse);stroke-width:1}
+.tipp{position:absolute;top:0;pointer-events:none;background:var(--flaeche);border:1px solid var(--rand);border-radius:6px;padding:5px 9px;font-size:.86rem;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.08);transform:translateX(-50%)}
+.tipp b{display:block;font-size:.98rem}
+.tipp span{color:var(--leise)}
+.tipp[hidden]{display:none}
+details{margin-top:6px;color:var(--leise);font-size:.88rem}
+summary{cursor:pointer;width:max-content}
+table{border-collapse:collapse;margin-top:8px;font-variant-numeric:tabular-nums}
+td,th{padding:3px 14px 3px 0;text-align:left;font-weight:400}
+
+.nebenwerte{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.kachel{padding:16px 18px 14px}
+.kachel .zeile1{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.kachel .wert{font-size:1.75rem;font-weight:600;line-height:1.15}
+.kachel .tag{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kachel svg{display:block;width:100%;height:46px;margin:10px 0 8px;overflow:visible}
+.kachel .linie{fill:none;stroke:var(--linie);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.kachel .ende{fill:var(--linie);stroke:var(--flaeche);stroke-width:2}
+.kachel .unten{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--leise);font-size:.86rem}
+.kachel .messer{width:72px;margin:0}
+.geschlossen{color:var(--leise);font-size:.9rem;margin-top:6px}
+.leer{color:var(--leise);padding:20px;border:1px dashed var(--rand);border-radius:10px;margin-top:20px}
+
+.feed-kopf{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:40px 0 12px}
+.filter{display:flex;gap:6px}
+.filter button{padding:5px 12px;font-size:.9rem}
+.filter button[aria-pressed=true]{background:var(--text);border-color:var(--text);color:var(--grund)}
+ol{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.meldung{background:var(--flaeche);border:1px solid var(--rand);border-left:4px solid var(--achse);border-radius:8px;padding:14px 16px}
+.meldung.belastend{border-left-color:var(--rot)}
+.meldung.stuetzend{border-left-color:var(--gruen)}
+.meldung.kurs{border-left-color:var(--linie)}
+.oben{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline}
+.chip{font-size:.8rem;font-weight:600;padding:1px 9px;border-radius:999px;background:var(--grau-hell);color:var(--text2);white-space:nowrap}
+.belastend .chip{background:var(--rot-hell);color:var(--rot)}
+.stuetzend .chip{background:var(--gruen-hell);color:var(--gruen)}
+.kurs .chip{background:var(--spur);color:var(--text)}
+.thema{font-weight:600}
+.uhr{margin-left:auto;color:var(--leise);font-size:.86rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.meldung p{margin-top:6px;max-width:72ch;overflow-wrap:anywhere}
+.meldung .warum{color:var(--text2)}
+.meldung .quelle{margin-top:8px;color:var(--leise);font-size:.86rem}
+.meldung a{color:var(--linie)}
+footer{margin-top:44px;color:var(--leise);font-size:.86rem;max-width:72ch}
+footer p+p{margin-top:6px}
+
+@media (max-width:620px){
+  main{padding-left:16px;padding-right:16px}
+  .haupt{padding:16px 16px 10px}
+  .nebenwerte{gap:10px}
+  .kachel{padding:13px 14px 12px}
+  .kachel .wert{font-size:1.35rem}
+  .kachel .tag{font-size:.9rem}
+  .kachel .unten{flex-direction:column;align-items:stretch;gap:6px}
+  .kachel .messer{width:100%}
+  .uhr{margin-left:0;width:100%;order:3}
+}
+@media (max-width:360px){.nebenwerte{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:no-preference){.laedt .haupt,.laedt .nebenwerte{opacity:.6;transition:opacity .2s}}
+</style>
+</head>
+<body>
+<main>
+  <header class="kopf">
+    <h1>Markt-Alarm</h1>
+    <div class="frische" id="frische"><span class="punkt"></span><span id="frische-text">Lade Daten ...</span>
+      <button type="button" id="neu">Aktualisieren</button></div>
+  </header>
+  <p class="hinweis" id="hinweis" role="status" hidden></p>
+
+  <div id="markt"></div>
+
+  <section aria-labelledby="t-meldungen">
+    <div class="feed-kopf"><h2 id="t-meldungen">Meldungen</h2>
+      <div class="filter" role="group" aria-label="Meldungen filtern">
+        <button type="button" data-f="alle" aria-pressed="true">Alle</button>
+        <button type="button" data-f="schlagzeile" aria-pressed="false">Schlagzeilen</button>
+        <button type="button" data-f="kurs" aria-pressed="false">Kurse</button>
+      </div></div>
+    <ol id="meldungen"></ol>
+  </section>
+
+  <footer>
+    <p>Die Einschätzungen stammen von einer KI, die nur Schlagzeilen liest. Sie sind Vermutungen und können falsch sein;
+    der Markt hat beim Eintreffen einer Meldung meist schon reagiert. Keine Anlageberatung.</p>
+    <p>Kurse von Yahoo Finance, teils um Minuten verzögert. GitHub prüft etwa alle 5 bis 15 Minuten.</p>
+  </footer>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const SVG = "http://www.w3.org/2000/svg";
+function el(art, klasse, text) { const e = document.createElement(art); if (klasse) e.className = klasse; if (text != null) e.textContent = text; return e; }
+function sv(art, attr) { const e = document.createElementNS(SVG, art); for (const k in attr) e.setAttribute(k, attr[k]); return e; }
+const zahl = (x, n = 2) => x.toLocaleString("de-DE", {minimumFractionDigits: n, maximumFractionDigits: n});
+const proz = x => (x > 0 ? "+" : x < 0 ? "−" : "±") + zahl(Math.abs(x)) + " %";
+const uhr = d => new Date(d).toLocaleTimeString("de-DE", {hour: "2-digit", minute: "2-digit"});
+function wann(iso) {
+  const d = new Date(iso);
+  return (new Date().toDateString() === d.toDateString() ? "" : d.toLocaleDateString("de-DE", {day: "2-digit", month: "2-digit"}) + " ") + uhr(d);
+}
+
+let daten = null, filter = "alle", laedt = false;
+
+// ---------------------------------------------------------------- Kursdiagramm
+function schritt(spanne, ziel) {
+  const roh = spanne / ziel, basis = Math.pow(10, Math.floor(Math.log10(roh)));
+  return [1, 2, 2.5, 5, 10].map(f => f * basis).find(s => s >= roh) || basis * 10;
+}
+
+function zeichneDiagramm(feld, kurs) {
+  const punkte = kurs.verlauf || [];
+  feld.replaceChildren();
+  if (punkte.length < 2) return;
+  const breite = feld.clientWidth || 600, hoehe = breite < 500 ? 170 : 220;
+  const rechts = 58, unten = 22, oben = 8;
+  const werte = punkte.map(p => p[1]).concat(kurs.vortag ? [kurs.vortag] : []);
+  let lo = Math.min(...werte), hi = Math.max(...werte);
+  const rand = (hi - lo) * 0.08 || hi * 0.002; lo -= rand; hi += rand;
+  const t0 = punkte[0][0], t1 = punkte[punkte.length - 1][0];
+  const x = t => (t - t0) / Math.max(1, t1 - t0) * (breite - rechts);
+  const y = v => oben + (hi - v) / (hi - lo) * (hoehe - oben - unten);
+  const svg = sv("svg", {viewBox: `0 0 ${breite} ${hoehe}`, height: hoehe, tabindex: 0, role: "img",
+    "aria-label": `${kurs.name}, Verlauf der letzten Stunden, zuletzt ${zahl(kurs.stand)}`});
+
+  const s = schritt(hi - lo, 4);
+  for (let v = Math.ceil(lo / s) * s; v <= hi; v += s) {
+    svg.append(sv("line", {class: "gitter", x1: 0, x2: breite - rechts, y1: y(v), y2: y(v)}));
+    const t = sv("text", {class: "achse", x: breite - rechts + 8, y: y(v) + 4}); t.textContent = zahl(v, s < 1 ? 2 : 0); svg.append(t);
+  }
+  const stunden = (t1 - t0) / 3600, abstand = stunden > 6 ? 2 : 1;
+  for (let t = Math.ceil(t0 / 3600) * 3600; t <= t1; t += 3600) {
+    if (new Date(t * 1000).getHours() % abstand) continue;
+    const xt = x(t); if (xt < 20 || xt > breite - rechts - 20) continue;
+    const l = sv("text", {class: "achse", x: xt, y: hoehe - 4, "text-anchor": "middle"}); l.textContent = uhr(t * 1000); svg.append(l);
+  }
+  if (kurs.vortag && kurs.vortag > lo && kurs.vortag < hi) {
+    svg.append(sv("line", {class: "vortag", x1: 0, x2: breite - rechts, y1: y(kurs.vortag), y2: y(kurs.vortag)}));
+    const l = sv("text", {class: "achse", x: 4, y: y(kurs.vortag) - 6}); l.textContent = "Vortag " + zahl(kurs.vortag, 0); svg.append(l);
+  }
+  const pfad = punkte.map((p, i) => (i ? "L" : "M") + x(p[0]).toFixed(1) + " " + y(p[1]).toFixed(1)).join("");
+  svg.append(sv("path", {class: "flaeche", d: pfad + `L${x(t1).toFixed(1)} ${hoehe - unten}L0 ${hoehe - unten}Z`}));
+  svg.append(sv("path", {class: "linie", d: pfad}));
+  const letzter = punkte[punkte.length - 1];
+  svg.append(sv("circle", {class: "ende", cx: x(letzter[0]), cy: y(letzter[1]), r: 4}));
+
+  // Fadenkreuz: folgt Finger, Maus und Pfeiltasten und rastet auf den nächsten Punkt ein
+  const faden = sv("line", {class: "faden", y1: oben, y2: hoehe - unten, visibility: "hidden"});
+  const punkt = sv("circle", {class: "ende", r: 4, visibility: "hidden"});
+  svg.append(faden, punkt);
+  const tipp = el("div", "tipp"); tipp.hidden = true;
+  const tippWert = el("b"), tippZeit = el("span"); tipp.append(tippWert, tippZeit);
+  let index = punkte.length - 1;
+  function zeige(i) {
+    index = Math.max(0, Math.min(punkte.length - 1, i));
+    const [t, v] = punkte[index], px = x(t);
+    for (const [a, w] of [["x1", px], ["x2", px]]) faden.setAttribute(a, w);
+    punkt.setAttribute("cx", px); punkt.setAttribute("cy", y(v));
+    faden.setAttribute("visibility", "visible"); punkt.setAttribute("visibility", "visible");
+    tippWert.textContent = zahl(v); tippZeit.textContent = uhr(t * 1000) + " Uhr";
+    tipp.hidden = false;
+    const skal = feld.clientWidth / breite;
+    tipp.style.left = Math.max(46, Math.min(feld.clientWidth - 46, px * skal)) + "px";
+  }
+  function verstecke() { faden.setAttribute("visibility", "hidden"); punkt.setAttribute("visibility", "hidden"); tipp.hidden = true; }
+  function naechster(ev) {
+    const r = svg.getBoundingClientRect(), xp = (ev.clientX - r.left) / r.width * breite;
+    let best = 0; punkte.forEach((p, i) => { if (Math.abs(x(p[0]) - xp) < Math.abs(x(punkte[best][0]) - xp)) best = i; });
+    return best;
+  }
+  svg.addEventListener("pointermove", ev => zeige(naechster(ev)));
+  svg.addEventListener("pointerdown", ev => zeige(naechster(ev)));
+  svg.addEventListener("pointerleave", verstecke);
+  svg.addEventListener("focus", () => zeige(index));
+  svg.addEventListener("blur", verstecke);
+  svg.addEventListener("keydown", ev => {
+    if (ev.key === "ArrowLeft") { zeige(index - 1); ev.preventDefault(); }
+    if (ev.key === "ArrowRight") { zeige(index + 1); ev.preventDefault(); }
+    if (ev.key === "Escape") verstecke();
+  });
+  feld.append(svg, tipp);
+}
+
+function zeichneLinie(svg, punkte) {
+  svg.replaceChildren();
+  if (!punkte || punkte.length < 2) return;
+  const breite = 300, hoehe = 46;
+  const werte = punkte.map(p => p[1]); let lo = Math.min(...werte), hi = Math.max(...werte);
+  if (hi === lo) { hi += 1; lo -= 1; }
+  const t0 = punkte[0][0], t1 = punkte[punkte.length - 1][0];
+  const x = t => (t - t0) / Math.max(1, t1 - t0) * (breite - 6);
+  const y = v => 4 + (hi - v) / (hi - lo) * (hoehe - 8);
+  svg.setAttribute("viewBox", `0 0 ${breite} ${hoehe}`); svg.setAttribute("preserveAspectRatio", "none");
+  svg.append(sv("path", {class: "linie", d: punkte.map((p, i) => (i ? "L" : "M") + x(p[0]).toFixed(1) + " " + y(p[1]).toFixed(1)).join(""), "vector-effect": "non-scaling-stroke"}));
+}
+
+// ---------------------------------------------------------------- Kurse
+function bewegungsMesser(kurs) {
+  const m = el("div", "messer"), i = el("i"), anteil = Math.min(1, Math.abs(kurs.bewegung || 0) / kurs.schwelle);
+  i.style.width = (anteil * 100) + "%"; m.append(i); if (anteil >= 1) m.classList.add("voll");
+  m.setAttribute("role", "img"); m.setAttribute("aria-label", `${zahl(Math.abs(kurs.bewegung || 0))} von ${zahl(kurs.schwelle, 1)} Prozent bis zur Meldung`);
+  return m;
+}
+
+function zeigeKurse() {
+  const feld = $("markt"); feld.replaceChildren();
+  const kurse = daten.kurse || [];
+  if (!kurse.length) { feld.append(el("p", "leer", "Noch keine Kurse. Sobald GitHub die erste Prüfung erledigt hat, stehen sie hier.")); return; }
+  const [haupt, ...rest] = kurse;
+
+  const karte = el("section", "karte haupt"); karte.setAttribute("aria-label", haupt.name);
+  const kopf = el("div", "haupt-kopf"), links = el("div"), rechts = el("div", "kennzahlen");
+  links.append(el("p", "marktname", haupt.name), el("p", "held", zahl(haupt.stand)));
+  if (haupt.tag != null) {
+    const k = el("div", "kennzahl"); k.append(el("div", "wert", proz(haupt.tag)), el("div", "bez", "seit Vortag")); rechts.append(k);
+  }
+  if (haupt.bewegung != null) {
+    const k = el("div", "kennzahl"); k.append(el("div", "wert", proz(haupt.bewegung)), el("div", "bez", `in ${daten.fenster_minuten} Minuten, Meldung ab ${zahl(haupt.schwelle, 1)} %`), bewegungsMesser(haupt)); rechts.append(k);
+  }
+  kopf.append(links, rechts); karte.append(kopf);
+  if (haupt.alt) karte.append(el("p", "geschlossen", "Markt geschlossen. Letzter Kurs von " + wann(haupt.kurszeit) + "."));
+  const diagramm = el("div", "diagramm"); karte.append(diagramm);
+  if ((haupt.verlauf || []).length > 1) {
+    const det = el("details"), sum = el("summary", "", "Werte als Tabelle"), tab = el("table"), kopfz = el("tr");
+    kopfz.append(el("th", "", "Uhrzeit"), el("th", "", "Kurs")); tab.append(kopfz);
+    haupt.verlauf.filter((p, i, a) => i === a.length - 1 || i % 6 === 0).forEach(p => { const tr = el("tr"); tr.append(el("td", "", uhr(p[0] * 1000)), el("td", "", zahl(p[1]))); tab.append(tr); });
+    det.append(sum, tab); karte.append(det);
+  }
+  feld.append(karte);
+  zeichneDiagramm(diagramm, haupt);
+
+  if (rest.length) {
+    const reihe = el("div", "nebenwerte");
+    for (const k of rest) {
+      const kachel = el("section", "karte kachel"); kachel.setAttribute("aria-label", k.name);
+      kachel.append(el("p", "marktname", k.name));
+      const z1 = el("div", "zeile1"); z1.append(el("span", "wert", zahl(k.stand))); if (k.tag != null) z1.append(el("span", "tag", proz(k.tag))); kachel.append(z1);
+      const linie = document.createElementNS(SVG, "svg"); linie.setAttribute("aria-hidden", "true"); kachel.append(linie); zeichneLinie(linie, k.verlauf);
+      const unten = el("div", "unten");
+      if (k.alt) unten.append(el("span", "", "Geschlossen, Stand " + wann(k.kurszeit)));
+      else if (k.bewegung != null) { unten.append(el("span", "", `${proz(k.bewegung)} in ${daten.fenster_minuten} Min.`), bewegungsMesser(k)); }
+      kachel.append(unten); reihe.append(kachel);
+    }
+    feld.append(reihe);
+  }
+}
+
+// ---------------------------------------------------------------- Meldungen
+const RICHTUNG = {belastend: "Eher belastend", stuetzend: "Eher stützend", unklar: "Effekt unklar"};
+function zeigeMeldungen() {
+  const liste = $("meldungen"); liste.replaceChildren();
+  const alle = daten.meldungen || [];
+  const passend = alle.filter(m => filter === "alle" || (filter === "kurs" ? m.art === "kurs" || m.art === "marke" : m.art === "schlagzeile"));
+  if (!passend.length) {
+    liste.append(el("li", "leer", alle.length ? "Keine Meldungen in dieser Auswahl."
+      : "Noch keine Meldungen. Sobald ein Kurs stark schwankt oder eine wichtige Schlagzeile erscheint, steht sie hier und kommt aufs Handy."));
+    return;
+  }
+  for (const m of passend) {
+    const richtung = String(m.richtung || "").toLowerCase().replace("ü", "ue");
+    const istKurs = m.art === "kurs" || m.art === "marke";
+    const li = el("li", "meldung " + (istKurs ? "kurs" : RICHTUNG[richtung] ? richtung : ""));
+    const oben = el("div", "oben");
+    if (m.was) {
+      const staerke = (richtung === "belastend" || richtung === "stuetzend") && m.staerke ? ", " + m.staerke : "";
+      oben.append(el("span", "chip", (RICHTUNG[richtung] || "Effekt unklar") + staerke), el("span", "thema", m.thema || ""));
+    } else {
+      oben.append(el("span", "chip", istKurs ? "Kurs" : m.art === "test" ? "Test" : "Schlagzeile"),
+                  el("span", "thema", istKurs || m.art === "test" ? String(m.titel || "").replace(/^\S+\s/, "") : (m.thema || "")));
+    }
+    oben.append(el("span", "uhr", wann(m.zeit))); li.append(oben);
+    if (m.was) {
+      li.append(el("p", "", m.was));
+      if (m.warum) li.append(el("p", "warum", "Warum: " + m.warum));
+      if (m.belastbarkeit) li.append(el("p", "warum", "Belastbarkeit: " + m.belastbarkeit));
+    } else if (m.roh) {
+      li.append(el("p", "", m.roh));
+    } else if (!m.schlagzeile && m.text) {
+      li.append(el("p", "", m.text));
+    }
+    if (m.schlagzeile) {
+      const quelle = el("p", m.was || m.roh ? "quelle" : "");
+      if (m.was || m.roh) quelle.append("Schlagzeile: ");
+      if (m.link && /^https?:\/\//.test(m.link)) { const a = el("a", "", m.schlagzeile); a.href = m.link; a.target = "_blank"; a.rel = "noopener noreferrer"; quelle.append(a); }
+      else quelle.append(m.schlagzeile);
+      li.append(quelle);
+    }
+    liste.append(li);
+  }
+}
+
+// ---------------------------------------------------------------- Laden
+function zeigeFrische() {
+  const alter = (Date.now() - new Date(daten.aktualisiert)) / 60000;
+  $("frische").className = "frische" + (alter < 20 ? " frisch" : "");
+  $("frische-text").textContent = "Aktualisiert " + wann(daten.aktualisiert);
+  const hinweise = [];
+  if (alter >= 20) hinweise.push("Seit " + wann(daten.aktualisiert) + " keine neuen Daten. GitHub hat die Prüfung verzögert, oder sie ist fehlgeschlagen.");
+  if ((daten.fehler || []).length) hinweise.push("Beim letzten Lauf: " + daten.fehler.join("; ") + ".");
+  if (daten.handy_aktiv === false) hinweise.push("Kein ntfy-Kanal hinterlegt, deshalb gehen keine Meldungen aufs Handy.");
+  $("hinweis").textContent = hinweise.join(" "); $("hinweis").hidden = !hinweise.length;
+}
+
+async function lade() {
+  if (laedt) return;
+  laedt = true; document.body.classList.add("laedt");
+  try {
+    const antwort = await fetch("daten.json?t=" + Date.now(), {cache: "no-store"});
+    if (antwort.status === 404) { $("frische-text").textContent = "Noch keine Daten. Die erste Prüfung auf GitHub steht noch aus."; return; }
+    if (!antwort.ok) throw new Error("HTTP " + antwort.status);
+    daten = await antwort.json();
+    zeigeFrische(); zeigeKurse(); zeigeMeldungen();
+  } catch (e) {
+    $("frische").className = "frische";
+    $("frische-text").textContent = "Daten nicht erreichbar. Prüfe die Internetverbindung.";
+  } finally {
+    laedt = false; document.body.classList.remove("laedt");
+  }
+}
+
+$("neu").onclick = lade;
+document.querySelectorAll(".filter button").forEach(b => b.onclick = () => {
+  filter = b.dataset.f;
+  document.querySelectorAll(".filter button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  if (daten) zeigeMeldungen();
+});
+document.addEventListener("visibilitychange", () => { if (!document.hidden) lade(); });
+window.addEventListener("pageshow", lade);
+let breiteVorher = window.innerWidth;
+window.addEventListener("resize", () => { if (daten && Math.abs(window.innerWidth - breiteVorher) > 30) { breiteVorher = window.innerWidth; zeigeKurse(); } });
+lade(); setInterval(lade, 60000);
+</script>
+</body>
+</html>

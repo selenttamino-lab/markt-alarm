@@ -1,0 +1,26 @@
+{
+  "fenster_minuten": 15,
+  "ruhe_minuten": 15,
+  "kurse": [
+    {"name": "S&P 500 Future", "symbol": "ES=F", "schwelle": 0.4},
+    {"name": "Öl WTI", "symbol": "CL=F", "schwelle": 1.5},
+    {"name": "VIX", "symbol": "^VIX", "schwelle": 8.0}
+  ],
+  "kursmarken": {
+    "ES=F": []
+  },
+  "themen": {
+    "Fed und Zinsen": "Federal Reserve OR Powell OR FOMC",
+    "Trump und Zölle": "Trump tariffs OR \"Truth Social\" markets",
+    "Öl und Geopolitik": "oil prices OR OPEC OR \"Strait of Hormuz\"",
+    "Börse": "\"S&P 500\" OR \"Wall Street\" stocks"
+  },
+  "signalworte": [
+    "tariff", "tariffs", "truth social", "rate cut", "rate hike", "emergency", "plunge", "plunges",
+    "tumble", "tumbles", "selloff", "sell-off", "crash", "surge", "surges", "soar", "soars", "slump",
+    "attack", "strike", "strikes", "sanctions", "ceasefire", "shutdown", "default", "inflation",
+    "jobs report", "record high", "halts", "halted"
+  ],
+  "ki_modell": "claude-haiku-4-5",
+  "ki_max_pro_tag": 100
+}

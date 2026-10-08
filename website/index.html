@@ -173,7 +173,35 @@ function wann(iso) {
   return (new Date().toDateString() === d.toDateString() ? "" : d.toLocaleDateString("de-DE", {day: "2-digit", month: "2-digit"}) + " ") + uhr(d);
 }
 
-let daten = null, filter = "alle", laedt = false;
+let daten = null, filter = "alle", laedt = false, etag = null, nachgesehen = null;
+
+// Woher die Daten kommen: bevorzugt frisch über die GitHub-Schnittstelle aus dem Zweig "zustand",
+// denn GitHub Pages hält daten.json bis zu 10 Minuten im Zwischenspeicher.
+const PROJEKT = (() => {
+  const vorgabe = new URLSearchParams(location.search).get("repo");
+  if (vorgabe && /^[\w.-]+\/[\w.-]+$/.test(vorgabe)) return vorgabe;
+  const name = location.pathname.split("/").filter(Boolean)[0];
+  return location.hostname.endsWith(".github.io") && name ? location.hostname.split(".")[0] + "/" + name : null;
+})();
+
+async function holeDaten() {
+  if (PROJEKT) {
+    try {
+      const kopf = {"Accept": "application/vnd.github.raw+json"};
+      if (etag) kopf["If-None-Match"] = etag;
+      const antwort = await fetch(`https://api.github.com/repos/${PROJEKT}/contents/zustand.json?ref=zustand`, {headers: kopf, cache: "no-store"});
+      if (antwort.status === 304 && daten) return daten;          // unverändert, zählt nicht gegen GitHubs Abfragegrenze
+      if (antwort.ok) {
+        const zustand = await antwort.json();
+        if (zustand.website) { etag = antwort.headers.get("ETag"); return zustand.website; }
+      }
+    } catch (e) { /* weiter mit daten.json */ }
+  }
+  const antwort = await fetch("daten.json?t=" + Date.now(), {cache: "no-store"});
+  if (antwort.status === 404) return null;
+  if (!antwort.ok) throw new Error("HTTP " + antwort.status);
+  return antwort.json();
+}
 
 // ---------------------------------------------------------------- Kursdiagramm
 function schritt(spanne, ziel) {
@@ -366,7 +394,7 @@ function zeigeMeldungen() {
 function zeigeFrische() {
   const alter = (Date.now() - new Date(daten.aktualisiert)) / 60000;
   $("frische").className = "frische" + (alter < 20 ? " frisch" : "");
-  $("frische-text").textContent = "Aktualisiert " + wann(daten.aktualisiert);
+  $("frische-text").textContent = "Daten von " + wann(daten.aktualisiert) + (nachgesehen ? ", nachgesehen " + nachgesehen.toLocaleTimeString("de-DE") : "");
   const hinweise = [];
   if (alter >= 20) hinweise.push("Seit " + wann(daten.aktualisiert) + " keine neuen Daten. GitHub hat die Prüfung verzögert, oder sie ist fehlgeschlagen.");
   if ((daten.fehler || []).length) hinweise.push("Beim letzten Lauf: " + daten.fehler.join("; ") + ".");
@@ -380,11 +408,13 @@ async function lade() {
   if (laedt) return;
   laedt = true; document.body.classList.add("laedt");
   try {
-    const antwort = await fetch("daten.json?t=" + Date.now(), {cache: "no-store"});
-    if (antwort.status === 404) { $("frische-text").textContent = "Noch keine Daten. Die erste Prüfung auf GitHub steht noch aus."; return; }
-    if (!antwort.ok) throw new Error("HTTP " + antwort.status);
-    daten = await antwort.json();
-    zeigeFrische(); zeigeKurse(); zeigeMeldungen();
+    const neu = await holeDaten();
+    if (!neu) { $("frische-text").textContent = "Noch keine Daten. Die erste Prüfung auf GitHub steht noch aus."; return; }
+    nachgesehen = new Date();
+    const geaendert = neu !== daten;
+    daten = neu;
+    zeigeFrische();
+    if (geaendert) { zeigeKurse(); zeigeMeldungen(); }
   } catch (e) {
     $("frische").className = "frische";
     $("frische-text").textContent = "Daten nicht erreichbar. Prüfe die Internetverbindung.";

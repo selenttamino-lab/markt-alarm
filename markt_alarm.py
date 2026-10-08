@@ -480,12 +480,14 @@ def main():
               extra={"thema": thema, "schlagzeile": titel, **(einordnung or {})})
 
     zustand["letzter_lauf"] = jetzt().isoformat(timespec="seconds")
-    ZUSTAND_DATEI.write_text(json.dumps(zustand, ensure_ascii=False), encoding="utf-8")
-
     daten = {"aktualisiert": zustand["letzter_lauf"], "takt_minuten": TAKT_MINUTEN,
              "fenster_minuten": FENSTER.seconds // 60, "kurse": kurse, "fehler": fehler,
              "ki_aktiv": bool(KI_SCHLUESSEL), "handy_aktiv": bool(NTFY_THEMA),
              "meldungen": zustand["meldungen"][:150]}
+    # Die Website liest ihre Daten bevorzugt aus dem Zweig "zustand" über die GitHub-Schnittstelle,
+    # weil GitHub Pages Dateien bis zu 10 Minuten zwischenspeichert. daten.json bleibt als Rückfall.
+    zustand["website"] = daten
+    ZUSTAND_DATEI.write_text(json.dumps(zustand, ensure_ascii=False), encoding="utf-8")
     DATEN_DATEI.parent.mkdir(parents=True, exist_ok=True)
     DATEN_DATEI.write_text(json.dumps(daten, ensure_ascii=False), encoding="utf-8")
     for f in fehler:

@@ -155,7 +155,7 @@ footer p+p{margin-top:6px}
   <footer>
     <p>Die Einschätzungen stammen von einer KI, die nur Schlagzeilen liest. Sie sind Vermutungen und können falsch sein;
     der Markt hat beim Eintreffen einer Meldung meist schon reagiert. Keine Anlageberatung.</p>
-    <p>Kurse von Yahoo Finance, teils um Minuten verzögert. GitHub prüft etwa alle 5 bis 15 Minuten.</p>
+    <p><span id="quelle">Kurse teils um Minuten verzögert.</span> GitHub prüft etwa alle 5 bis 15 Minuten.</p>
   </footer>
 </main>
 
@@ -371,6 +371,8 @@ function zeigeFrische() {
   if (alter >= 20) hinweise.push("Seit " + wann(daten.aktualisiert) + " keine neuen Daten. GitHub hat die Prüfung verzögert, oder sie ist fehlgeschlagen.");
   if ((daten.fehler || []).length) hinweise.push("Beim letzten Lauf: " + daten.fehler.join("; ") + ".");
   if (daten.handy_aktiv === false) hinweise.push("Kein ntfy-Kanal hinterlegt, deshalb gehen keine Meldungen aufs Handy.");
+  const quellen = [...new Set((daten.kurse || []).map(k => k.quelle).filter(Boolean))];
+  $("quelle").textContent = quellen.length ? "Kurse von " + quellen.join(" und ") + ", teils um Minuten verzögert." : "Kurse teils um Minuten verzögert.";
   $("hinweis").textContent = hinweise.join(" "); $("hinweis").hidden = !hinweise.length;
 }
 

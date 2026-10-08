@@ -22,6 +22,7 @@ nicht die Artikel; ihre Einschätzung ist eine Vermutung und kann falsch sein.
 import json
 import os
 import re
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
@@ -92,29 +93,141 @@ def sende(zustand, titel, text, link=None, dringlichkeit=4, art="hinweis", extra
 
 
 # ---------------------------------------------------------------- Kurse
-def hole_kurs(symbol):
-    """Minutenkurse des laufenden Handelstags von Yahoo: Liste (Zeit, Kurs) und Schlusskurs des Vortags."""
+# Yahoo blockiert Anfragen von GitHub-Servern oft. Deshalb gibt es Ausweichquellen, die der Reihe nach
+# versucht werden: Yahoo mit dem Erkennungsmerkmal eines echten Browsers, dann CNBC, dann Stooq.
+AUSWEICH = {
+    "ES=F": {"cnbc": "@SP.1", "stooq": "es.f"},
+    "CL=F": {"cnbc": "@CL.1", "stooq": "cl.f"},
+    "^VIX": {"cnbc": ".VIX", "stooq": "^vix"},
+}
+_browser_abruf = None
+
+
+def browser_abruf():
+    """Holt Seiten wie ein echter Chrome-Browser (Paket curl_cffi); fehlt es, wird es einmalig nachinstalliert."""
+    global _browser_abruf
+    if _browser_abruf is None:
+        try:
+            from curl_cffi import requests as echt
+        except ImportError:
+            subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "curl_cffi"], check=False)
+            try:
+                from curl_cffi import requests as echt
+            except ImportError:
+                echt = None
+        _browser_abruf = ((lambda url, **k: echt.get(url, impersonate="chrome", **k)) if echt
+                          else (lambda url, **k: requests.get(url, headers=BROWSER, **k)))
+    return _browser_abruf
+
+
+def zahl_aus(wert):
+    """Liest Zahlen wie "6,412.25" oder "0.52%"; gibt None zurück, wenn es keine Zahl ist."""
+    try:
+        return float(str(wert).replace(",", "").replace("%", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def finde(daten, schluessel):
+    """Sucht in verschachtelten JSON-Daten den ersten Wert zu einem Schlüssel."""
+    if isinstance(daten, dict):
+        if schluessel in daten:
+            return daten[schluessel]
+        daten = list(daten.values())
+    if isinstance(daten, list):
+        for teil in daten:
+            gefunden = finde(teil, schluessel)
+            if gefunden is not None:
+                return gefunden
+    return None
+
+
+def von_yahoo(symbol):
     letzter_fehler = None
     for rechner in ("query1", "query2"):
         try:
-            antwort = requests.get(
-                f"https://{rechner}.finance.yahoo.com/v8/finance/chart/{quote_plus(symbol)}",
-                params={"range": "1d", "interval": "1m", "includePrePost": "true"},
-                headers=BROWSER, timeout=20)
+            antwort = browser_abruf()(f"https://{rechner}.finance.yahoo.com/v8/finance/chart/{quote_plus(symbol)}",
+                                      params={"range": "1d", "interval": "1m", "includePrePost": "true"}, timeout=20)
             antwort.raise_for_status()
             ergebnis = antwort.json()["chart"]["result"][0]
             break
         except Exception as fehler:
             letzter_fehler = fehler
     else:
-        raise RuntimeError(f"Yahoo antwortet nicht ({letzter_fehler})")
+        raise RuntimeError(str(letzter_fehler))
     zeiten = ergebnis.get("timestamp") or []
     schluss = (((ergebnis.get("indicators") or {}).get("quote") or [{}])[0]).get("close") or []
     punkte = [(datetime.fromtimestamp(t, timezone.utc), float(k)) for t, k in zip(zeiten, schluss) if k is not None]
-    if not punkte:
-        raise RuntimeError("keine Kurse erhalten")
     meta = ergebnis.get("meta") or {}
     return punkte, meta.get("chartPreviousClose") or meta.get("previousClose")
+
+
+def von_cnbc(symbol):
+    zeichen = AUSWEICH.get(symbol, {}).get("cnbc")
+    if not zeichen:
+        raise RuntimeError("kein Kürzel")
+    antwort = requests.get("https://ts-api.cnbc.com/harmony/app/charts/1D.json", params={"symbol": zeichen},
+                           headers=BROWSER, timeout=20)
+    antwort.raise_for_status()
+    punkte = []
+    for balken in finde(antwort.json(), "priceBars") or []:
+        ms, kurs = balken.get("tradeTimeinMills"), zahl_aus(balken.get("close"))
+        if ms and kurs is not None:
+            punkte.append((datetime.fromtimestamp(int(ms) / 1000, timezone.utc), kurs))
+    vortag = None
+    try:
+        kurz = requests.get("https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol",
+                            params={"symbols": zeichen, "requestMethod": "itv", "noform": 1, "partnerId": 2,
+                                    "fund": 1, "exthrs": 1, "output": "json"}, headers=BROWSER, timeout=20).json()
+        angaben = (finde(kurz, "FormattedQuote") or [{}])[0]
+        vortag = zahl_aus(angaben.get("previous_day_closing"))
+    except Exception:
+        pass
+    return sorted(punkte), vortag
+
+
+def von_stooq(symbol):
+    """Nur der letzte Kurs; den Verlauf baut das Programm aus seinen eigenen Läufen auf."""
+    zeichen = AUSWEICH.get(symbol, {}).get("stooq")
+    if not zeichen:
+        raise RuntimeError("kein Kürzel")
+    antwort = requests.get("https://stooq.com/q/l/", params={"s": zeichen, "f": "sd2t2c", "h": "", "e": "csv"},
+                           headers=BROWSER, timeout=20)
+    antwort.raise_for_status()
+    zeilen = antwort.text.strip().splitlines()
+    kurs = zahl_aus(dict(zip(zeilen[0].split(","), zeilen[1].split(","))).get("Close")) if len(zeilen) > 1 else None
+    if kurs is None:
+        raise RuntimeError("kein Kurs in der Antwort")
+    return [(jetzt(), kurs)], None
+
+
+QUELLEN = [("Yahoo Finance", von_yahoo), ("CNBC", von_cnbc), ("Stooq", von_stooq)]
+
+
+def hole_kurs(symbol, zustand):
+    """Kurse des laufenden Handelstags: Liste (Zeit, Kurs), Schlusskurs des Vortags, Name der Quelle.
+    Liefert eine Quelle nur den letzten Kurs, ergänzt das Programm den Verlauf aus den eigenen Läufen."""
+    versuche = []
+    for name, abruf in QUELLEN:
+        try:
+            punkte, vortag = abruf(symbol)
+            if punkte:
+                break
+            versuche.append(f"{name}: keine Kurse")
+        except Exception as fehler:
+            versuche.append(f"{name}: {str(fehler)[:120]}")
+    else:
+        raise RuntimeError("keine Quelle erreichbar (" + "; ".join(versuche) + ")")
+    reihe = zustand.setdefault("reihen", {}).setdefault(symbol, [])
+    zeit, kurs = punkte[-1]
+    if not reihe or reihe[-1][0] < int(zeit.timestamp()):
+        reihe.append([int(zeit.timestamp()), kurs])
+    grenze = int((jetzt() - timedelta(hours=14)).timestamp())
+    reihe[:] = [p for p in reihe if p[0] >= grenze]
+    if len(punkte) < 3:
+        punkte = [(datetime.fromtimestamp(t, timezone.utc), k) for t, k in reihe]
+    vortag = vortag or zustand.setdefault("vortag", {}).get(symbol)
+    return punkte, vortag, name, versuche
 
 
 def verdichte(punkte, stunden=10, minuten=5):
@@ -148,7 +261,7 @@ def pruefe_kurse(zustand):
     for vorgabe in EINSTELLUNGEN["kurse"]:
         name, symbol, schwelle = vorgabe["name"], vorgabe["symbol"], vorgabe["schwelle"]
         try:
-            punkte, vortag = hole_kurs(symbol)
+            punkte, vortag, quelle, versuche = hole_kurs(symbol, zustand)
         except Exception as f:
             fehler.append(f"{name}: {f}")
             if symbol in zuletzt:                       # letzten bekannten Stand weiter zeigen, als veraltet markiert
@@ -157,7 +270,9 @@ def pruefe_kurse(zustand):
         zeit, aktuell = punkte[-1]
         kurs = {"name": name, "symbol": symbol, "stand": aktuell, "schwelle": schwelle,
                 "kurszeit": zeit.isoformat(), "vortag": vortag, "verlauf": verdichte(punkte),
-                "tag": (aktuell / vortag - 1) * 100 if vortag else None}
+                "tag": (aktuell / vortag - 1) * 100 if vortag else None, "quelle": quelle}
+        if versuche:
+            print(f"Hinweis: {name} von {quelle}, vorher fehlgeschlagen: {'; '.join(versuche)}")
         kurse.append(kurs)
         zuletzt[symbol] = kurs
         seit = zeit_aus(geprueft_bis.get(symbol)) or zeit - FENSTER

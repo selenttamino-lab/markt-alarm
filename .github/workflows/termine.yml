@@ -1,0 +1,67 @@
+# Sucht alle 5 Minuten nach freien Terminen im Bürgerbüro Magdeburg, solange eine Suche aktiv ist.
+# Was gesucht wird, legst du über "Run workflow" fest.
+name: Terminsuche
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      anliegen:
+        description: "Anliegen, z. B. Reisepass oder Anmeldung. 'aus' beendet die Suche."
+        type: string
+        required: false
+      standort:
+        description: "Standort, z. B. Nord. Leer lassen für alle Standorte."
+        type: string
+        required: false
+
+permissions:
+  contents: write      # Zustand im Zweig "termine" speichern
+
+concurrency:
+  group: terminsuche
+  cancel-in-progress: false
+
+jobs:
+  suchen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zustand vom letzten Lauf holen
+        id: zustand
+        run: |
+          if git fetch --depth=1 origin termine 2>/dev/null; then
+            git show origin/termine:termine.json > termine.json
+          else
+            echo "{}" > termine.json
+          fi
+          if grep -q '"auswahl": {' termine.json; then echo "aktiv=ja" >> "$GITHUB_OUTPUT"; else echo "aktiv=nein" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/setup-python@v5
+        if: steps.zustand.outputs.aktiv == 'ja' || github.event_name == 'workflow_dispatch'
+        with:
+          python-version: "3.12"
+
+      - name: Nach Terminen sehen
+        if: steps.zustand.outputs.aktiv == 'ja' || github.event_name == 'workflow_dispatch'
+        env:
+          NTFY_TERMINE: ${{ secrets.NTFY_TERMINE }}
+          ANLIEGEN: ${{ inputs.anliegen }}
+          STANDORT: ${{ inputs.standort }}
+        run: |
+          pip install --quiet requests
+          python termine.py
+
+      - name: Zustand speichern
+        if: steps.zustand.outputs.aktiv == 'ja' || github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p "$RUNNER_TEMP/termine"
+          cp termine.json "$RUNNER_TEMP/termine/"
+          cd "$RUNNER_TEMP/termine"
+          git init -q -b termine
+          git add termine.json
+          git -c user.name="terminsuche" -c user.email="terminsuche@users.noreply.github.com" commit -q -m "Zustand"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" termine

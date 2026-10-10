@@ -113,6 +113,16 @@ ol{list-style:none;margin:0;padding:0;display:grid;gap:10px}
 .meldung .warum{color:var(--text2)}
 .meldung .quelle{margin-top:8px;color:var(--leise);font-size:.86rem}
 .meldung a{color:var(--linie)}
+.termine{margin-top:14px;padding:16px 18px}
+.termine[hidden]{display:none}
+.termine .zeile1{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;justify-content:space-between}
+.termine .lage{margin-top:6px;font-weight:600}
+.termine.frei{border-color:var(--gruen);box-shadow:0 0 0 2px var(--gruen-hell)}
+.termine.frei .lage{color:var(--gruen)}
+.termine ul{margin:8px 0 0;padding-left:20px}
+.termine li{margin-top:2px;font-variant-numeric:tabular-nums}
+.termine .buchen{display:inline-block;margin-top:10px;color:var(--flaeche);background:var(--linie);border-radius:6px;padding:7px 14px;text-decoration:none;font-weight:600}
+.termine .klein{color:var(--leise);font-size:.86rem;margin-top:8px}
 footer{margin-top:44px;color:var(--leise);font-size:.86rem;max-width:72ch}
 footer p+p{margin-top:6px}
 
@@ -141,6 +151,7 @@ footer p+p{margin-top:6px}
   <p class="hinweis" id="hinweis" role="status" hidden></p>
 
   <div id="markt"></div>
+  <section class="karte termine" id="termine" aria-labelledby="t-termine" hidden></section>
 
   <section aria-labelledby="t-meldungen">
     <div class="feed-kopf"><h2 id="t-meldungen">Meldungen</h2>
@@ -404,7 +415,63 @@ function zeigeFrische() {
   $("hinweis").textContent = hinweise.join(" "); $("hinweis").hidden = !hinweise.length;
 }
 
+// ---------------------------------------------------------------- Terminsuche Bürgerbüro
+let termine = null, etagTermine = null;
+async function holeTermine() {
+  if (!PROJEKT) return null;
+  const kopf = {"Accept": "application/vnd.github.raw+json"};
+  if (etagTermine) kopf["If-None-Match"] = etagTermine;
+  const antwort = await fetch(`https://api.github.com/repos/${PROJEKT}/contents/termine.json?ref=termine`, {headers: kopf, cache: "no-store"});
+  if (antwort.status === 304) return termine;
+  if (!antwort.ok) return null;
+  etagTermine = antwort.headers.get("ETag");
+  return antwort.json();
+}
+
+function tagKurz(tag) {
+  const [t, m, j] = tag.split(".").map(Number);
+  return new Date(j, m - 1, t).toLocaleDateString("de-DE", {weekday: "short", day: "2-digit", month: "2-digit"});
+}
+
+function zeigeTermine() {
+  const feld = $("termine"), z = termine;
+  feld.hidden = !z; if (!z) return;
+  feld.replaceChildren();
+  const frei = z.auswahl && z.status === "frei" && (z.termine || []).length;
+  feld.className = "karte termine" + (frei ? " frei" : "");
+  const kopf = el("div", "zeile1"); const h = el("h2", "", "Terminsuche Bürgerbüro"); h.id = "t-termine";
+  kopf.append(h, el("span", "uhr", z.zuletzt_geprueft ? "geprüft " + wann(z.zuletzt_geprueft) : ""));
+  feld.append(kopf);
+  if (!z.auswahl) {
+    feld.append(el("p", "lage", "Keine Suche aktiv."),
+      el("p", "klein", "Starten auf GitHub unter Actions, Terminsuche, Run workflow: dort das Anliegen eintragen, zum Beispiel Reisepass."));
+  } else {
+    feld.append(el("p", "", "Gesucht: " + z.auswahl.name + ", Standort: " + (z.auswahl.standort || "alle")));
+    if (frei) {
+      feld.append(el("p", "lage", "Freie Termine gefunden"));
+      const liste = el("ul");
+      for (const t of z.termine) liste.append(el("li", "", t.standort + ": " + tagKurz(t.tag) + (t.zeiten.length ? ", " + t.zeiten.join(", ") : "")));
+      const a = el("a", "buchen", "Im Portal buchen"); a.href = "https://terminvergabe.magdeburg.de/select2?md=2"; a.target = "_blank"; a.rel = "noopener noreferrer";
+      feld.append(liste, a);
+    } else if (z.status === "fehler" || z.status === "unklar") {
+      feld.append(el("p", "lage", "Die Terminseite ließ sich zuletzt nicht lesen."), el("p", "klein", z.fehler || ""));
+    } else {
+      feld.append(el("p", "lage", "Zurzeit kein Termin frei."));
+    }
+  }
+  const namen = (z.anliegen_liste || []).map(a => a.name).filter(Boolean);
+  if (namen.length) {
+    const det = el("details"), sum = el("summary", "", "Mögliche Anliegen"), ul = el("ul");
+    namen.forEach(n => ul.append(el("li", "", n))); det.append(sum, ul); feld.append(det);
+  }
+}
+
+async function ladeTermine() {
+  try { const neu = await holeTermine(); if (neu !== termine) { termine = neu; zeigeTermine(); } } catch (e) { /* Terminsuche ist optional */ }
+}
+
 async function lade() {
+  ladeTermine();
   if (laedt) return;
   laedt = true; document.body.classList.add("laedt");
   try {

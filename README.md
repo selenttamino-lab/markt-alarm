@@ -31,3 +31,15 @@ Beispiel für eine Kursmarke beim S&P-500-Future: `"kursmarken": {"ES=F": [7600,
 ## Anhalten
 
 Im Reiter "Actions" den Ablauf "Markt-Alarm" wählen, oben rechts über das Menü "Disable workflow".
+
+## Terminsuche Bürgerbüro Magdeburg
+
+`termine.py` sieht alle 5 Minuten im Online-Terminportal der Stadt nach freien Terminen für ein Anliegen
+und meldet neue freie Termine über einen eigenen ntfy-Kanal (Secret `NTFY_TERMINE`). Gesteuert wird sie
+von `.github/workflows/termine.yml`:
+
+- Starten oder ändern: Actions → Terminsuche → Run workflow, bei "anliegen" zum Beispiel `Reisepass`
+  eintragen, bei "standort" optional `Nord`.
+- Beenden: dasselbe mit `aus` als Anliegen.
+
+Das Programm bucht nie selbst. Der Zustand liegt im Zweig `termine`, die Website zeigt ihn an.
